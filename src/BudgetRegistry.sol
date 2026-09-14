@@ -53,4 +53,8 @@ contract BudgetRegistry {
         nextBudgetId++;
         emit BudgetCreated(budgetId, _ministry, _fiscalYear, _allocatedAmount, msg.sender);
     }
+
+    function getnextBudgetId() external view returns(uint256){
+        return nextBudgetId;
+    }
 }
