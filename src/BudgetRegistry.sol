@@ -22,8 +22,17 @@ contract BudgetRegistry {
         uint64 createdAt;
         bool active;
     }
+   uint256 private nextProgramId = 1;
+    struct Program {
+        uint256 budgetId;
+        string name;
+        uint64 allocatedAmount;
+        uint64 spentAmount;
+        bool active;
+    }
 
     mapping(uint256 => Budget) public budgets;
+    mapping(uint256 => Program) public programs;
 
     modifier onlyAuthorizedMinistries {
         require(authorizedMinistries[msg.sender],"You Are Not Autorized");
@@ -34,6 +43,12 @@ contract BudgetRegistry {
         uint256 indexed id,
         string ministry,
         uint16 fiscalYear,
+        uint64 allocatedAmount,
+        address createdBy
+    );
+    event ProgramCreated(
+        uint256 indexed id,
+        string name,
         uint64 allocatedAmount,
         address createdBy
     );
@@ -53,6 +68,20 @@ contract BudgetRegistry {
         nextBudgetId++;
         emit BudgetCreated(budgetId, _ministry, _fiscalYear, _allocatedAmount, msg.sender);
     }
+
+    function createProgram(string memory _name,uint64 _allocatedAmount,uint256 _budgetId) external {
+        uint256 programId = nextProgramId;
+        programs[programId] = Program({
+            budgetId:_budgetId,
+            name:_name,
+            allocatedAmount:_allocatedAmount,
+            spentAmount:0,
+            active:true
+        });
+        nextProgramId++;
+        emit ProgramCreated(programId, _name, _allocatedAmount, msg.sender);
+    }
+
 
     function getnextBudgetId() external view returns(uint256){
         return nextBudgetId;
