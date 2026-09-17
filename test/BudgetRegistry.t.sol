@@ -48,11 +48,53 @@ contract CounterTest is Test {
         assertTrue(active);
         assertEq(budgetRegistry.getnextBudgetId(), 3);
     }
+
+    function testAuthorizedMinistryCanCreateProgram() external {
+        vm.startPrank(ministry1);
+        budgetRegistry.createBudget("Health", 2018, 1000000);
+
+        budgetRegistry.createProgram("Medicines",500000,1);
+        vm.stopPrank();
+        (
+            uint256 budgetId,
+            string memory name,
+            uint64 allocatedAmount,
+            uint64 spentAmount,
+            bool active
+        ) = budgetRegistry.programs(1);
+
+        assertEq(budgetId, 1);
+        assertEq(name, "Medicines");
+        assertEq(allocatedAmount, 500000);
+        assertEq(spentAmount, 0);
+        assertTrue(active);
+    }
         
     function testUnauthorizedAddressCannotCreateBudget() public {
         vm.prank(unauthorizedUser);
         vm.expectRevert("You Are Not Autorized");
         budgetRegistry.createBudget("Health", 2018, 1000000);
+    }
+    function testUnauthorizedAddressCannotCreateProgram() public {
+        vm.prank(ministry1);
+        budgetRegistry.createBudget("Health", 2018, 1000000);
+        vm.prank(unauthorizedUser);
+        vm.expectRevert("You Are Not Autorized");
+        budgetRegistry.createProgram("Medicines",500000,1);
+        
+    }
+
+    function testCannotCreatProgramNoBudgetCreated() external {
+        vm.prank(ministry1);
+        vm.expectRevert("Budget is not active");
+        budgetRegistry.createProgram("Medicines",500000,1);
+    }
+    function testCannotCreatProgramAllocatedAmountExceedBaseBudget() external {
+        vm.startPrank(ministry1);
+        budgetRegistry.createBudget("Health", 2018, 1000000);
+        vm.expectRevert("Exceeds available budget");
+        budgetRegistry.createProgram("Medicines",5000000,1);
+        vm.stopPrank();
     }
 
     function testFuzz_CreateBudget(uint16 _fiscalYear,uint64 _allocatedAmount) external {
@@ -73,6 +115,40 @@ contract CounterTest is Test {
         assertEq(spentAmount, 0); assertEq(createdBy, ministry1); 
         assertTrue(active);
 
+    }
+    function testFuzz_CreateProgram( uint64 programAllocation ) public {
+        uint64 budgetAmount = 10_000_000;
+
+        vm.assume(programAllocation > 0);
+        vm.assume(programAllocation <= budgetAmount);
+
+        vm.prank(ministry1);
+
+        budgetRegistry.createBudget(
+            "Ministry of Health",
+            2026,
+            budgetAmount
+        );
+
+        vm.prank(ministry1);
+
+        budgetRegistry.createProgram(
+            "Hospital Development",
+            programAllocation,
+            1
+        );
+
+        (
+            ,
+            ,
+            uint64 allocatedAmount,
+            uint64 spentAmount,
+            bool active
+        ) = budgetRegistry.programs(1);
+
+        assertEq(allocatedAmount, programAllocation);
+        assertEq(spentAmount, 0);
+        assertTrue(active);
     }
 
     function testFuzz_MultipleBudgets( uint64 amount1, uint64 amount2, uint16 year1, uint16 year2 ) public {
@@ -129,6 +205,34 @@ contract CounterTest is Test {
             budgetRegistry.createBudget("Health", 2018, 1000000);
         }
     }
+    function testFuzz_CreateProgram_Name(string memory name) public {
+            vm.assume(bytes(name).length > 0);
+            vm.prank(ministry1);
+
+            budgetRegistry.createBudget(
+                "Ministry of Health",
+                2026,
+                10_000_000
+            );
+
+            vm.prank(ministry1);
+
+            budgetRegistry.createProgram(
+                name,
+                1_000_000,
+                1
+            );
+
+            (
+                ,
+                string memory storedName,
+                ,
+                ,
+                
+            ) = budgetRegistry.programs(1);
+
+            assertEq(storedName, name);
+        }
 
     function test_MaxUint64Allocation() external {
         vm.prank(ministry1);
@@ -167,6 +271,79 @@ contract CounterTest is Test {
         budgetRegistry.createBudget( "Finance", 2026, 5_000_000 ); 
         assertEq(budgetRegistry.getnextBudgetId(), 1);
     }
+
+    function test_CreatePrograms_IdsAreSequential() public {
+        vm.prank(ministry1);
+
+        budgetRegistry.createBudget(
+            "Ministry of Health",
+            2026,
+            10_000_000
+        );
+
+        vm.startPrank(ministry1);
+
+        budgetRegistry.createProgram(
+            "Hospitals",
+            1_000_000,
+            1
+        );
+
+        budgetRegistry.createProgram(
+            "Medicines",
+            2_000_000,
+            1
+        );
+
+        vm.stopPrank();
+
+        (
+            ,
+            string memory name1,
+            ,
+            ,
+            
+        ) = budgetRegistry.programs(1);
+
+        (
+            ,
+            string memory name2,
+            ,
+            ,
+            
+        ) = budgetRegistry.programs(2);
+
+        assertEq(name1, "Hospitals");
+        assertEq(name2, "Medicines");
+    }
+
+    function test_CreateProgram_EmitsEvent() public {
+        vm.prank(ministry1);
+
+        budgetRegistry.createBudget(
+            "Ministry of Health",
+            2026,
+            10_000_000
+        );
+
+        vm.expectEmit(true, true, false, true);
+
+        emit BudgetRegistry.ProgramCreated(
+            1,
+            1,
+            "Hospital Development",
+            1_000_000,
+            ministry1
+        );
+
+        vm.prank(ministry1);
+
+        budgetRegistry.createProgram(
+            "Hospital Development",
+            1_000_000,
+            1
+        );
+  }
 
 
 }
