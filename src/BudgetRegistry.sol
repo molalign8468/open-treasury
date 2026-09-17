@@ -31,6 +31,7 @@ contract BudgetRegistry {
         bool active;
     }
 
+
     mapping(uint256 => Budget) public budgets;
     mapping(uint256 => Program) public programs;
 
@@ -48,6 +49,7 @@ contract BudgetRegistry {
     );
     event ProgramCreated(
         uint256 indexed id,
+        uint256 indexed budgetId,
         string name,
         uint64 allocatedAmount,
         address createdBy
@@ -69,7 +71,13 @@ contract BudgetRegistry {
         emit BudgetCreated(budgetId, _ministry, _fiscalYear, _allocatedAmount, msg.sender);
     }
 
-    function createProgram(string memory _name,uint64 _allocatedAmount,uint256 _budgetId) external {
+    function createProgram(string memory _name,uint64 _allocatedAmount,uint256 _budgetId) external onlyAuthorizedMinistries {
+        Budget storage budget = budgets[_budgetId];
+        require(budget.active, "Budget is not active");
+        require(bytes(_name).length > 0, "Program name is empty");
+        require(_allocatedAmount > 0, "Allocation must be greater than zero");
+        require( budget.allocatedAmount - budget.spentAmount >= _allocatedAmount, "Exceeds available budget" );
+
         uint256 programId = nextProgramId;
         programs[programId] = Program({
             budgetId:_budgetId,
@@ -79,11 +87,15 @@ contract BudgetRegistry {
             active:true
         });
         nextProgramId++;
-        emit ProgramCreated(programId, _name, _allocatedAmount, msg.sender);
+        emit ProgramCreated(programId,_budgetId, _name, _allocatedAmount, msg.sender);
     }
 
 
     function getnextBudgetId() external view returns(uint256){
         return nextBudgetId;
+    }
+    
+    function getnextProgramId() external view returns(uint256) {
+        return nextProgramId;
     }
 }
