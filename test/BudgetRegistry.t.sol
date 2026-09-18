@@ -9,6 +9,8 @@ contract CounterTest is Test {
 
     address ministry1 = address(0x1);
     address ministry2 = address(0x2);
+    address spender1 = address(0x4);
+    address spender2 = address(0x5);
     address unauthorizedUser = address(0x3);
 
 
@@ -17,11 +19,27 @@ contract CounterTest is Test {
         authorized[0] = ministry1;
         authorized[1] = ministry2;
         budgetRegistry = new BudgetRegistry(authorized);
+        vm.startPrank(ministry1);
+        budgetRegistry.authorizeSpender(spender1);
+        budgetRegistry.authorizeSpender(spender2);
+        vm.stopPrank();
     }
 
     function testAuthorizedMinistryIsRegistered() external view {
         assertTrue(budgetRegistry.authorizedMinistries(ministry1));
         assertTrue(budgetRegistry.authorizedMinistries(ministry2));
+    }
+    function testAuthorizedSpenderIsRegistered() external view {
+        assertTrue(budgetRegistry.authorizedSpenders(spender1));
+        assertTrue(budgetRegistry.authorizedSpenders(spender2));
+    }
+
+    function testRevokeSpender() external {
+        vm.startPrank(ministry1);
+        budgetRegistry.revokeSpender(spender1);
+        assertFalse(budgetRegistry.authorizedSpenders(spender1));
+        assertTrue(budgetRegistry.authorizedSpenders(spender2));
+        vm.stopPrank();
     }
 
     function testAuthorizedMinistryCanCreateBudget() external {
@@ -69,11 +87,47 @@ contract CounterTest is Test {
         assertEq(spentAmount, 0);
         assertTrue(active);
     }
+
+    function testAuthorizedSpenderCanSpend() external {
+        vm.startPrank(ministry1);
+        budgetRegistry.createBudget("Health", 2018, 1000000);
+        budgetRegistry.createProgram("Medicines",500000,1);
+        vm.stopPrank();
+        vm.prank(spender1);
+        vm.warp(1700000000);
+        budgetRegistry.recordSpending(1,200000,"Qmscshsd");
+
+        (,,,uint64 spentAmount,) = budgetRegistry.programs(1);
+
+        (
+            uint256 programId,
+            uint64 amount,
+            string memory evidenceCID,
+            address recordedBy,
+            uint64 timestamp
+        ) = budgetRegistry.spendings(1);
+
+        assertEq(programId, 1);
+        assertEq(amount,200000);
+        assertEq(evidenceCID, "Qmscshsd");
+        assertEq(recordedBy, spender1);
+        assertEq(timestamp, 1700000000);
+        assertEq(spentAmount, 200000);
+    }
         
     function testUnauthorizedAddressCannotCreateBudget() public {
         vm.prank(unauthorizedUser);
         vm.expectRevert("You Are Not Autorized");
         budgetRegistry.createBudget("Health", 2018, 1000000);
+    }
+    function testUnauthorizedAddressCannotSpend() public {
+        vm.startPrank(ministry1);
+        budgetRegistry.createBudget("Health", 2018, 1000000);
+        budgetRegistry.createProgram("Medicines",500000,1);
+        vm.stopPrank();
+        vm.prank(unauthorizedUser);
+        vm.expectRevert("Not authorized spender");
+        budgetRegistry.recordSpending(1,2000000,"Qmscshsd");
     }
     function testUnauthorizedAddressCannotCreateProgram() public {
         vm.prank(ministry1);
@@ -192,6 +246,34 @@ contract CounterTest is Test {
         vm.expectRevert("You Are Not Autorized");
         budgetRegistry.createBudget( "Health", fiscalYear, amount); 
 
+    }
+
+    function testFuzzTotalSpendingLessThanProgramAllocation(uint64 budgetAmount,uint64 progamAloction, uint64 spendingamount) external{
+        vm.assume(spendingamount <= progamAloction && progamAloction <= budgetAmount && progamAloction > 0);
+        vm.startPrank(ministry1);
+        budgetRegistry.createBudget("Health", 2018, budgetAmount);
+        budgetRegistry.createProgram("Medicines",progamAloction,1);
+        vm.stopPrank();
+        vm.prank(spender1);
+        vm.warp(1700000000);
+        budgetRegistry.recordSpending(1,spendingamount,"Qmscshsd");
+
+        (,,,uint64 spentAmount,) = budgetRegistry.programs(1);
+
+        (
+            uint256 programId,
+            uint64 amount,
+            string memory evidenceCID,
+            address recordedBy,
+            uint64 timestamp
+        ) = budgetRegistry.spendings(1);
+
+        assertEq(programId, 1);
+        assertEq(amount,spendingamount);
+        assertEq(evidenceCID, "Qmscshsd");
+        assertEq(recordedBy, spender1);
+        assertEq(timestamp, 1700000000);
+        assertEq(spentAmount, spendingamount);
     }
     function testFuzz_OnlyAuthorizedAddressesCanCreate(address caller) external {
         bool authorized = caller == ministry1 || caller == ministry2;
