@@ -17,7 +17,7 @@ contract BudgetRegistry {
         uint16 fiscalYear;
 
         uint64 allocatedAmount;
-        uint64 spentAmount;
+        uint64 disbursedAmount;
 
         address createdBy;
         uint64 createdAt;
@@ -35,7 +35,7 @@ contract BudgetRegistry {
     struct Spending {
         uint256 programId;
         uint64 amount;
-        string evidenceCID;
+        string metadataCID;
         address recordedBy;
         uint64 timestamp;
     }
@@ -94,7 +94,7 @@ contract BudgetRegistry {
             ministry:_ministry,
             fiscalYear:_fiscalYear,
             allocatedAmount: _allocatedAmount,
-            spentAmount:0,
+            disbursedAmount:0,
             createdBy:msg.sender,
             createdAt: uint64(block.timestamp),
             active:true
@@ -108,7 +108,7 @@ contract BudgetRegistry {
         require(budget.active, "Budget is not active");
         require(bytes(_name).length > 0, "Program name is empty");
         require(_allocatedAmount > 0, "Allocation must be greater than zero");
-        require( budget.allocatedAmount - budget.spentAmount >= _allocatedAmount, "Exceeds available budget" );
+        require( budget.allocatedAmount - budget.disbursedAmount >= _allocatedAmount, "Exceeds available budget" );
 
         uint256 programId = nextProgramId;
         programs[programId] = Program({
@@ -118,27 +118,28 @@ contract BudgetRegistry {
             spentAmount:0,
             active:true
         });
+        budget.disbursedAmount += _allocatedAmount;
         nextProgramId++;
         emit ProgramCreated(programId,_budgetId, _name, _allocatedAmount, msg.sender);
     }
     
-    function recordSpending(uint256 _programId, uint64 _amount, string memory _evidenceCID) external onlyAuthorizedSpender {
+    function recordSpending(uint256 _programId, uint64 _amount, string memory _metadataCID) external onlyAuthorizedSpender {
         Program storage program = programs[_programId];
         require(program.active,"Program is not active");
         require(_amount <= program.allocatedAmount - program.spentAmount,"Exceeds program allocation");
-        require(bytes(_evidenceCID).length > 0, "Evidence is required");
+        require(bytes(_metadataCID).length > 0, "Evidence is required");
 
         uint256 spendingId = nextSpendingId;
         spendings[spendingId] = Spending({
             programId: _programId, 
             amount: _amount, 
-            evidenceCID: _evidenceCID, 
+            metadataCID: _metadataCID, 
             recordedBy: msg.sender, 
             timestamp: uint64(block.timestamp)
         });
         program.spentAmount += _amount;
         nextSpendingId++ ;
-        emit SpendingRecorded( spendingId, _programId, _amount, _evidenceCID, msg.sender);
+        emit SpendingRecorded( spendingId, _programId, _amount, _metadataCID, msg.sender);
     }
 
     function getnextBudgetId() external view returns(uint256){
