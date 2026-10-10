@@ -53,6 +53,7 @@ export default function Navbar() {
           { label: "Create Budget", to: "/budgets/create" },
           { label: "Create Program", to: "/programs/create" },
           { label: "Manage Spenders", to: "/spenders/access" },
+          { label: "Review Report", to: "/reviewer" },
         ]
       : []),
     ...(spender
