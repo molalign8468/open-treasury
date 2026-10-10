@@ -5,12 +5,17 @@ import multer from "multer";
 import { PinataSDK } from "pinata";
 import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "node:crypto";
+
 import {
   Contract,
   JsonRpcProvider,
+  Wallet,
   isAddress,
   verifyMessage,
+  keccak256,
+  toUtf8Bytes,
 } from "ethers";
+
 
 dotenv.config();
 
@@ -47,6 +52,31 @@ async function isMinistryAuthorized(address) {
 
   return await budgetRegistry.authorizedMinistries(address);
 }
+
+
+const citizenTokenAddress = process.env.CITIZEN_TOKEN_ADDRESS;
+const rewardPrivateKey = process.env.REWARD_PRIVATE_KEY;
+
+if (!citizenTokenAddress || !isAddress(citizenTokenAddress)) {
+  throw new Error("CITIZEN_TOKEN_ADDRESS is missing or invalid.");
+}
+
+if (!rewardPrivateKey) {
+  throw new Error("REWARD_PRIVATE_KEY is missing.");
+}
+
+const rewardWallet = new Wallet(rewardPrivateKey, provider);
+
+const citizenToken = new Contract(
+  citizenTokenAddress,
+  [
+    "function rewardCitizen(address reporter, bytes32 reportKey) external",
+    "function rewardedReports(bytes32 reportKey) view returns (bool)",
+    "event CitizenRewarded(bytes32 indexed reportKey, address indexed reporter, uint256 amount)",
+  ],
+  rewardWallet
+);
+
 
 function createReviewMessage({
   address,
@@ -114,6 +144,48 @@ async function readReports(spendingId) {
     rewardTxHash: row.reward_tx_hash,
     createdAt: row.created_at,
   }));
+}
+
+
+async function rewardCitizenReport(reportId, reporter) {
+  if (!isAddress(reporter)) {
+    throw new Error("The report contains an invalid reporter address.");
+  }
+
+  const reportKey = keccak256(toUtf8Bytes(String(reportId)));
+  const alreadyRewarded = await citizenToken.rewardedReports(reportKey);
+
+  if (alreadyRewarded) {
+
+    const events = await citizenToken.queryFilter(
+      citizenToken.filters.CitizenRewarded(reportKey),
+      0,
+      "latest"
+    );
+
+    const matchingEvent = events.find(
+      (event) =>
+        event.args.reporter.toLowerCase() === reporter.toLowerCase()
+    );
+
+    if (!matchingEvent) {
+      throw new Error(
+        "Report was already rewarded, but its reward transaction could not be recovered."
+      );
+    }
+
+    return matchingEvent.transactionHash;
+  }
+
+  const tx = await citizenToken.rewardCitizen(reporter, reportKey);
+
+  const receipt = await tx.wait();
+
+  if (!receipt || receipt.status !== 1) {
+    throw new Error("The CITIZEN reward transaction failed.");
+  }
+
+  return receipt.hash;
 }
 
 
@@ -441,7 +513,7 @@ app.post("/api/reports/:id/review", async (req, res) => {
     const { data: existingReport, error: readError } =
       await supabase
         .from("citizen_reports")
-        .select("id, status")
+        .select("id, status, reporter, reward_tx_hash")
         .eq("id", reportId)
         .maybeSingle();
 
@@ -461,11 +533,21 @@ app.post("/api/reports/:id/review", async (req, res) => {
       });
     }
 
+    let rewardTxHash = existingReport.reward_tx_hash;
+
+    if (status === "Approved") {
+      rewardTxHash = await rewardCitizenReport(
+        reportId,
+        existingReport.reporter
+      );
+    }
+
     const { data, error } = await supabase
       .from("citizen_reports")
       .update({
         status,
         review_reason: reason.trim(),
+        reward_tx_hash: rewardTxHash,
       })
       .eq("id", reportId)
       .eq("status", "Pending")
@@ -477,12 +559,17 @@ app.post("/api/reports/:id/review", async (req, res) => {
     if (!data) {
       return res.status(409).json({
         success: false,
-        message: "The report was already reviewed.",
+        message:
+          "The report was already reviewed or changed. Check its current status and reward transaction.",
       });
     }
 
     return res.json({
       success: true,
+      message:
+        status === "Approved"
+          ? "Report approved and CITIZEN reward sent."
+          : "Report rejected. No reward was sent.",
       report: {
         id: data.id,
         spendingId: Number(data.spending_id),
@@ -494,6 +581,7 @@ app.post("/api/reports/:id/review", async (req, res) => {
         createdAt: data.created_at,
       },
     });
+
   } catch (error) {
     console.error("Review report error:", error);
 
