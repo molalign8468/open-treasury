@@ -1,6 +1,8 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useWalletStore } from "../stores/walletStore";
+import { getCitizenTokenBalance } from "../services/citizenToken";
 
 const API_URL = "http://localhost:5000/api/reports";
 
@@ -13,6 +15,40 @@ export default function CitizenReports({ spendingId }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const account = useWalletStore((state) => state.account);
+const isConnected = useWalletStore((state) => state.isConnected);
+const isCorrectNetwork = useWalletStore(
+  (state) => state.isCorrectNetwork
+);
+
+const [tokenBalance, setTokenBalance] = useState(null);
+const [balanceLoading, setBalanceLoading] = useState(false);
+const [balanceError, setBalanceError] = useState("");
+
+  const loadTokenBalance = useCallback(async () => {
+    if (!isConnected || !isCorrectNetwork || !account) {
+      setTokenBalance(null);
+      setBalanceError("");
+      return;
+    }
+
+    setBalanceLoading(true);
+    setBalanceError("");
+
+    try {
+      const result = await getCitizenTokenBalance(account);
+      setTokenBalance(result);
+    } catch (err) {
+      setBalanceError(err.message || "Could not load CITIZEN balance.");
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, [account, isConnected, isCorrectNetwork]);
+
+  useEffect(() => {
+    loadTokenBalance();
+  }, [loadTokenBalance]);
 
   useEffect(() => {
     if (!spendingId) {
@@ -83,9 +119,56 @@ export default function CitizenReports({ spendingId }) {
           to={`/spending/${spendingId}/report`}
           className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
-          + Submit a report
+          + Submit a report 
         </Link>
+        <button
+            type="button"
+            onClick={() => {
+              loadTokenBalance();
+              window.location.reload();
+            }}
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Refresh
+          </button>
+        
       </div>
+      
+
+      <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
+          <p className="text-sm font-medium text-indigo-800">
+            Your CITIZEN token balance
+          </p>
+
+          {balanceLoading ? (
+            <p className="mt-2 text-sm text-slate-600">
+              Loading balance...
+            </p>
+          ) : tokenBalance ? (
+            <p className="mt-2 text-3xl font-bold text-indigo-950">
+              {Number(tokenBalance.balance).toLocaleString(undefined, {
+                maximumFractionDigits: 4,
+              })}{" "}
+              <span className="text-lg">{tokenBalance.symbol}</span>
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-slate-600">
+              {!isConnected
+                ? "Connect your wallet to view your balance."
+                : !isCorrectNetwork
+                  ? "Switch to Sepolia to view your balance."
+                  : "Your token balance is currently unavailable."}
+            </p>
+          )}
+
+          {balanceError && (
+            <p className="mt-2 text-sm text-rose-700">{balanceError}</p>
+          )}
+
+          <p className="mt-2 text-xs text-indigo-800">
+            Earn 10 CITIZEN tokens for each eligible report approved by a ministry.
+          </p>
+        </div>
 
       <div className="mt-5">
         {loading ? (
@@ -250,6 +333,36 @@ function ReportCard({ report, gatewayBase }) {
           <strong>Review reason:</strong> {report.reviewReason}
         </div>
       )}
+      {status === "Approved" && (
+          <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+            <p className="font-semibold text-emerald-800">
+              {report.rewardTxHash
+                ? "Citizen reward transaction recorded"
+                : "Report approved — reward transaction not recorded"}
+            </p>
+
+            {report.rewardTxHash ? (
+              <>
+                <p className="mt-1 text-sm text-emerald-700">
+                  Reward: 10 CITIZEN
+                </p>
+
+                <a
+                  href={`https://sepolia.etherscan.io/tx/${report.rewardTxHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-block break-all text-sm font-semibold text-emerald-800 underline"
+                >
+                  View reward transaction on Sepolia Etherscan ↗
+                </a>
+              </>
+            ) : (
+              <p className="mt-1 text-sm text-emerald-700">
+                The report is approved, but the backend has not recorded a reward transaction hash.
+              </p>
+            )}
+          </div>
+        )}
     </article>
   );
 }
