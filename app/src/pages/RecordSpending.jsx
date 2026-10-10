@@ -7,7 +7,8 @@ import {
   recordSpending,
 } from "../services/budgetRegistry";
 
-const API_URL = "http://localhost:5000/api/evidence";
+const BASE_URL = import.meta.env.VITE_API_URL;
+const API_URL = `${BASE_URL}/api/evidence`;
 
 function formatAmount(value) {
   return BigInt(value || "0").toLocaleString();

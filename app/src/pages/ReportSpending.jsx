@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useWalletStore } from "../stores/walletStore";
 
-const API_URL = "http://localhost:5000/api/evidence";
+const BASE_URL = import.meta.env.VITE_API_URL;
+const API_URL = `${BASE_URL}/api/evidence`;
 
 export default function ReportSpending() {
   const { id } = useParams();

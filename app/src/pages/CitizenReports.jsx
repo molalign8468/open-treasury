@@ -4,7 +4,9 @@ import { Link } from "react-router-dom";
 import { useWalletStore } from "../stores/walletStore";
 import { getCitizenTokenBalance } from "../services/citizenToken";
 
-const API_URL = "http://localhost:5000/api/reports";
+const BASE_URL = import.meta.env.VITE_API_URL;
+
+const API_URL = `${BASE_URL}/api/reports`;
 
 function shortenAddress(address = "") {
   if (address.length < 14) return address;

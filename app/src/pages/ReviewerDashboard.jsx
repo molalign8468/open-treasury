@@ -5,8 +5,9 @@ import { Link } from "react-router-dom";
 import { useWalletStore } from "../stores/walletStore";
 import { isAuthorizedMinistry } from "../services/budgetRegistry";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const BASE_URL = import.meta.env.VITE_API_URL;
+
+const API_URL =`${BASE_URL}/api`;
 
 const gatewayBase = (
   import.meta.env.VITE_PINATA_GATEWAY || ""
