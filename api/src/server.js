@@ -595,8 +595,4 @@ app.post("/api/reports/:id/review", async (req, res) => {
 
 
 
-const PORT = process.env.PORT;
-
-app.listen(PORT, () => {
-  console.log(`OpenTreasury API running on http://localhost:${PORT}`);
-});
+export default app;
