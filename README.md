@@ -20,8 +20,8 @@ The platform combines smart contracts, decentralized evidence storage, and citiz
 ## Live Dapp              
 
 **Try OpenTreasury:** 
-[Launch the OpenTreasury DApp](https://sepolia.etherscan.io/address/0x41734299008C7FF12EE501558bA8E60c86134D34)
-
+[Launch the OpenTreasury DApp](https://open-treasury-taupe.vercel.app/)
+                 
 ## Table of Contents
 
 - [Overview](#overview)
